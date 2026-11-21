@@ -78,6 +78,10 @@ img{max-width:100%}
 .join-qr img,.join-qr canvas,.join-qr table{display:block}
 .join-hint{color:var(--faint);font-family:var(--mono);font-size:15px}
 .join-wait{display:flex;gap:10px;align-items:center;color:var(--amber);font-family:var(--mono);letter-spacing:.1em}
+.sync-line{font-family:var(--mono);font-size:13px;line-height:1.45;letter-spacing:.03em;margin-top:10px;color:var(--muted)}
+.sync-line.ok{color:var(--ok)}
+.sync-line.wait{color:var(--amber)}
+.sync-line.err{color:var(--red2)}
 .pulse{width:10px;height:10px;border-radius:50%;background:var(--amber);animation:pulse 1.2s infinite}
 @keyframes pulse{0%,100%{opacity:.25}50%{opacity:1}}
 

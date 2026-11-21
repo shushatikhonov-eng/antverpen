@@ -142,9 +142,10 @@ function hiddenLeadsLeft(act){
 
 /* ---------------- синхронизация ---------------- */
 const Sync = (() => {
-  const BROKERS = ['wss://broker.emqx.io:8084/mqtt','wss://broker.hivemq.com:8884/mqtt','wss://test.mosquitto.org:8081/mqtt'];
-  let client = null, topic = '', bc = null;
+  const BROKERS = ['wss://broker.emqx.io:8084/mqtt','wss://broker.hivemq.com:8884/mqtt','wss://mqtt.eclipseprojects.io:443/mqtt','wss://test.mosquitto.org:8081/mqtt'];
+  let client = null, topic = '', hiTopic = '', bc = null;
   let connected = false, brokerName = 'локально', attempt = 0;
+  let lastHello = 0; /* когда пульт последний раз «окликнул» (для индикатора на ТВ) */
 
   function setNet(){
     const cls = connected ? 'ok' : 'wait';
@@ -161,7 +162,12 @@ const Sync = (() => {
     else if (S && msg.v < S.v) publishNow();
   }
 
-  function onMsg(txt){ try { adopt(JSON.parse(txt)); } catch(e){} }
+  function onMsg(txt){
+    let msg = null;
+    try { msg = JSON.parse(txt); } catch(e){ return; }
+    if (msg && msg.t === 'hi'){ lastHello = Date.now(); return; } /* приветствие пульта, не состояние */
+    adopt(msg);
+  }
 
   function tryBroker(i){
     const my = ++attempt;
@@ -174,6 +180,7 @@ const Sync = (() => {
         brokerName = 'MQTT';
         setNet();
         client.subscribe(topic, {qos:1});
+        if (hiTopic) client.subscribe(hiTopic, {qos:0});
         publishNow();
       });
       client.on('message', function(_t, payload){ if (my === attempt) onMsg(payload.toString()); });
@@ -184,16 +191,26 @@ const Sync = (() => {
       });
       setTimeout(function(){
         if (my === attempt && !connected){ try { client.end(true); } catch(e){} tryBroker(i+1); }
-      }, 7000);
+      }, 5000);
     } catch(e){ tryBroker(i+1); }
   }
 
   function connect(){
     if (bc) try { bc.close(); } catch(e){}
-    bc = new BroadcastChannel('koda-' + ROOM);
-    bc.onmessage = function(ev){ onMsg(JSON.stringify(ev.data)); };
+    try {
+      bc = new BroadcastChannel('koda-' + ROOM);
+      bc.onmessage = function(ev){ onMsg(JSON.stringify(ev.data)); };
+    } catch(e){ bc = null; } /* старые Tizen без BroadcastChannel — работаем только через MQTT */
     topic = 'koda-v1-' + ROOM;
+    hiTopic = 'koda-hi-' + ROOM;
     tryBroker(0);
+    setInterval(publishHello, 3000);
+  }
+
+  /* телефон каждые 3 с «окликается», ТВ видит: пульт подключён */
+  function publishHello(){
+    if (!connected || role !== 'phone') return;
+    try { client.publish(hiTopic, JSON.stringify({t:'hi', role:'phone', ts:Date.now()}), {qos:0}); } catch(e){}
   }
 
   function publishNow(){
@@ -206,7 +223,9 @@ const Sync = (() => {
   let debounceT = null;
   function publish(){ clearTimeout(debounceT); debounceT = setTimeout(publishNow, 120); }
 
-  return {connect, publish, setNet, isMqtt: function(){ return connected; }};
+  return {connect, publish, setNet, isMqtt: function(){ return connected; },
+    broker: function(){ return brokerName; },
+    helloAge: function(){ return lastHello ? (Date.now() - lastHello) : Infinity; }};
 })();
 
 /* ---------------- карты (Leaflet) ---------------- */
@@ -379,12 +398,14 @@ const TV = (() => {
         '<div class="join-grid">' +
           '<div><div class="tag" style="margin-bottom:8px">КОД КОМНАТЫ</div>' +
           '<div class="join-code">'+esc(ROOM)+'</div>' +
-          '<div class="join-hint">управление — один телефон · игроки — все вместе</div></div>' +
+          '<div class="join-hint">управление — один телефон · игроки — все вместе</div>' +
+          '<div class="sync-line" id="tv-sync">проверка связи…</div></div>' +
           '<div class="join-qr" id="join-qr"></div>' +
         '</div>' +
         '<div class="join-wait"><span class="pulse"></span>отсканируйте QR телефоном — и начинайте</div>' +
       '</div>';
     try { new QRCode($('#join-qr'), {text:url, width:190, height:190, colorDark:'#191204', colorLight:'#efe6d4'}); } catch(e){}
+    updateSyncLine();
   }
 
   function renderIntroCard(stage){
@@ -399,11 +420,13 @@ const TV = (() => {
         '<div class="join-grid" style="margin-top:10px">' +
           '<div><div class="tag" style="margin-bottom:6px">КОД КОМНАТЫ</div>' +
           '<div class="join-code" style="font-size:44px">'+esc(ROOM)+'</div>' +
-          '<div class="join-hint">подключите телефон-пульт</div></div>' +
+          '<div class="join-hint">подключите телефон-пульт</div>' +
+          '<div class="sync-line" id="tv-sync">проверка связи…</div></div>' +
           '<div class="join-qr" id="join-qr"></div>' +
         '</div>' +
       '</div>';
     try { new QRCode($('#join-qr'), {text:url, width:150, height:150, colorDark:'#191204', colorLight:'#efe6d4'}); } catch(e){}
+    updateSyncLine();
   }
 
   function renderDoc(stage, tag, doc){
@@ -681,9 +704,11 @@ const UI = (() => {
       '<li>застряли — «Наводка»: три уровня подсказок;</li>' +
       '<li>финал — выбор версии случившегося и ставка очков.</li></ul>' +
       '<p class="cap">продолжительность: 2–3 часа · игроков: 2–8 · всё основано на реальном деле. Комната: <b>'+esc(ROOM)+'</b></p>' +
+      '<div class="sync-line" id="ph-sync">проверка связи…</div>' +
       '<div class="rowbtns"><button class="btn" data-start="1">НАЧАТЬ РАССЛЕДОВАНИЕ</button></div></div>';
     const b = stage.querySelector('[data-start]');
     if (b) b.addEventListener('click', function(){ Actions.start(); });
+    updateSyncLine();
   }
 
   function renderDonePhone(stage){
@@ -899,12 +924,14 @@ const UI = (() => {
       '</div>' +
       '<div class="ph-card"><h3>Комната</h3>' +
         '<p>Код: <span class="kbd" id="ph-room">'+esc(ROOM)+'</span> · синхронизация: '+(Sync.isMqtt()?'MQTT-брокер':'локальная')+'</p>' +
+        '<div class="sync-line" id="ph-sync">проверка связи…</div>' +
         '<p class="cap">Экран ТВ: откройте ссылку игры, режим «Экран следователя», введите код '+esc(ROOM)+' или отсканируйте QR с ТВ.</p></div>' +
       '<div class="ph-card"><h3>Правила в двух словах</h3>' +
         '<p>Очки общие, подсказки не штрафуются (уменьшают награду за вопрос). Финал — выбор версии и ставка. Победа командная.</p></div>' +
       renderSources() +
       '<div class="ph-card"><h3>Опасная зона</h3>' +
-        '<div class="rowbtns"><button class="btn ghost" id="btn-reset">НОВАЯ ИГРА (новая комната)</button></div></div>';
+        '<div class="rowbtns"><button class="btn ghost" data-restart2="1">НАЧАТЬ ЭТО ДЕЛО ЗАНОВО</button>' +
+        '<button class="btn ghost" id="btn-reset">НОВАЯ ИГРА (новая комната)</button></div></div>';
     $('#btn-reset', stage).addEventListener('click', function(){
       if (confirm('Начать новую игру? Прогресс будет потерян.')){
         ROOM = genRoom();
@@ -913,6 +940,10 @@ const UI = (() => {
         Sync.publish();
         renderAll();
       }
+    });
+    const rs2 = stage.querySelector('[data-restart2]');
+    if (rs2) rs2.addEventListener('click', function(){
+      if (confirm('Начать это дело заново? Очки, осмотр и ответы сбросятся.')) Actions.restart();
     });
   }
 
@@ -960,6 +991,38 @@ const UI = (() => {
 
   return {phoneTab, renderPhoneStage, renderDrawer, resetPicks, get tab(){ return tab; }};
 })();
+
+/* ---------------- индикатор связи «ТВ ↔ пульт» ---------------- */
+function updateSyncLine(){
+  const tv = $('#tv-sync');
+  if (tv && (role === 'tv' || role === 'solo')){
+    if (!Sync.isMqtt()){
+      tv.className = 'sync-line err';
+      tv.textContent = 'нет связи с брокером — телефон не сможет управлять экраном. Проверьте интернет на ТВ или включите соло-режим';
+    } else if (Sync.helloAge() < 8000){
+      tv.className = 'sync-line ok';
+      tv.textContent = 'пульт подключён — начинайте расследование на телефоне';
+    } else {
+      tv.className = 'sync-line wait';
+      tv.textContent = 'связь с брокером есть · ждём пульт: отсканируйте QR телефоном';
+    }
+  }
+  const ph = $('#ph-sync');
+  if (ph && role === 'phone'){
+    if (Sync.isMqtt()){
+      ph.className = 'sync-line ok';
+      ph.textContent = 'связь: MQTT-брокер · комната ' + ROOM + ' — экран ТВ получит всё, что вы делаете';
+    } else if (bcSupported()){
+      ph.className = 'sync-line wait';
+      ph.textContent = 'связь: только вкладки одного браузера. Для связи с ТВ нужен MQTT — проверьте интернет';
+    } else {
+      ph.className = 'sync-line err';
+      ph.textContent = 'связь не установлена — проверьте интернет';
+    }
+  }
+}
+function bcSupported(){ try { new BroadcastChannel('koda-probe'); return true; } catch(e){ return false; } }
+setInterval(updateSyncLine, 1200);
 
 /* ---------------- общий рендер ---------------- */
 let tvMapBuilt = false;
