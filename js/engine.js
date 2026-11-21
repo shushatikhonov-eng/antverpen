@@ -90,6 +90,10 @@ const Actions = {
     const i = parseInt(String(S.step).split(':')[1],10) || 0;
     if (i < CASE.epilogue.length - 1) Actions.goto('epi:'+(i+1));
     else Actions.goto('done');
+  },
+  restart(){
+    if (UI.resetPicks) UI.resetPicks();
+    commit(freshState());
   }
 };
 
@@ -552,7 +556,11 @@ const TV = (() => {
       '<div class="rank">'+esc(rank[1])+'</div>' +
       '<div class="line">'+esc(rank[2])+'</div>' +
       '<div class="stats"><span>'+S.score+' ОЧК.</span><span>ПОДСКАЗКИ: '+hints+'</span><span>ВРЕМЯ: '+fmtTime(Date.now() - (S.startedAt||Date.now()))+'</span></div>' +
-      '<div style="color:var(--muted);font-size:15px;margin-top:18px;max-width:560px">Спасибо за игру. Полное дело и источники — на телефоне в разделе «Меню».</div></div>';
+      '<div style="color:var(--muted);font-size:15px;margin-top:18px;max-width:560px">Спасибо за игру. Полное дело и источники — на телефоне в разделе «Меню».</div>' +
+      '<div class="rowbtns" style="justify-content:center;margin-top:24px">' +
+      '<button class="btn" data-restart="1">ПЕРЕИГРАТЬ ЭТО ДЕЛО</button>' +
+      '<button class="btn ghost" disabled title="в разработке">НОВОЕ ДЕЛО · В РАЗРАБОТКЕ</button></div></div>';
+    $$('#tv-view [data-restart]').forEach(function(b){ b.addEventListener('click', function(){ Actions.restart(); }); });
   }
 
   function footer(){
@@ -685,7 +693,11 @@ const UI = (() => {
     stage.innerHTML = '<div class="ph-card"><h3>ИТОГИ</h3>' +
       '<p style="font-size:20px;color:var(--amber)">'+esc(rank[1])+'</p>' +
       '<p>'+esc(rank[2])+'</p>' +
-      '<p class="cap">очки: '+S.score+' из '+maxScore+' возможных за расследование</p></div>' + renderSources();
+      '<p class="cap">очки: '+S.score+' из '+maxScore+' возможных за расследование</p>' +
+      '<div class="rowbtns"><button class="btn" data-restart="1">ПЕРЕИГРАТЬ ЭТО ДЕЛО</button>' +
+      '<button class="btn ghost" disabled>НОВОЕ ДЕЛО · В РАЗРАБОТКЕ</button></div></div>' + renderSources();
+    const r = stage.querySelector('[data-restart]');
+    if (r) r.addEventListener('click', function(){ Actions.restart(); });
   }
 
   function allLeadsOpen(act){ return visibleLeads(act).every(function(l){ return !!S.opened[l.id]; }); }
@@ -761,7 +773,8 @@ const UI = (() => {
       (hintLvl===2 ? '<button class="btn ghost mini" data-hint="3">ПОКАЗАТЬ ОТВЕТ</button>' : '') +
       '</div></div>';
 
-    const submitBlock = ans ? '' : '<div class="rowbtns"><button class="btn" data-submit="1">ОТВЕТИТЬ</button></div>';
+    const submitBlock = ans ? '' : '<div class="rowbtns"><button class="btn" data-submit="1">ОТВЕТИТЬ' +
+      (q.kind === 'multi' ? ' · отмечено: ' + (uiMulti[q.id] || []).length : '') + '</button></div>';
     const verdict = ans
       ? '<div class="verdict '+(ans.ok?'good':'bad')+'"><span class="vh">'+(ans.ok?'ВЕРНО':'НЕВЕРНО')+' · +'+ans.pts+' очк.</span>'+esc(q.why)+'</div>' +
         '<div class="rowbtns"><button class="btn" data-go="nextq">ДАЛЬШЕ</button></div>'
@@ -794,10 +807,9 @@ const UI = (() => {
         else if (q.kind === 'order'){ const arr = uiOrder[q.id]; if (!arr) return flashHint('Расставьте порядок стрелками'); Actions.submit(q.id, {order: arr}); }
         else if (q.kind === 'match'){ const ps = uiPairs[q.id]||{}; if (Object.keys(ps).length < q.pairs.length) return flashHint('Сопоставьте все пары'); Actions.submit(q.id, {pairs: ps}); }
       });
-    } else {
-      const nq = $('[data-go="nextq"]', stage);
-      if (nq) nq.addEventListener('click', function(){ Actions.nextQuiz(); });
     }
+    /* ДАЛЬШЕ (data-go="nextq") уже получает обработчик в bindGo —
+       второй listener вызывал двойной переход и пропуск вопросов */
     bindGo(stage);
   }
 
@@ -833,7 +845,7 @@ const UI = (() => {
     $$('[data-ver]', stage).forEach(function(b){ b.addEventListener('click', function(){ Actions.setVer(parseInt(b.dataset.ver,10)); }); });
     $$('[data-bet]', stage).forEach(function(b){ b.addEventListener('click', function(){ Actions.setBet(parseInt(b.dataset.bet,10)); }); });
     const r = $('[data-resolve]', stage); if (r) r.addEventListener('click', function(){ Actions.resolveBet(); });
-    const e = $('[data-go="epi"]', stage); if (e) e.addEventListener('click', function(){ Actions.goto('epi:0'); });
+    /* data-go="epi" обрабатывается в bindGo — дубль удалял двойным переходом */
     bindGo(stage);
   }
 
@@ -938,7 +950,15 @@ const UI = (() => {
     }); });
   }
 
-  return {phoneTab, renderPhoneStage, renderDrawer, get tab(){ return tab; }};
+  function resetPicks(){
+    /* очистка локальных черновиков ответов при переигрывании */
+    ['uiPicks','uiMulti','uiOrder','uiPairs'].forEach(function(store){
+      const o = ({uiPicks:uiPicks, uiMulti:uiMulti, uiOrder:uiOrder, uiPairs:uiPairs})[store];
+      Object.keys(o).forEach(function(k){ delete o[k]; });
+    });
+  }
+
+  return {phoneTab, renderPhoneStage, renderDrawer, resetPicks, get tab(){ return tab; }};
 })();
 
 /* ---------------- общий рендер ---------------- */
