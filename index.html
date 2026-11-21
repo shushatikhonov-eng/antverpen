@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0e0b07">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Код Антверпена — детективная игра по реальному делу</title>
+<link rel="icon" href="assets/svg/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="fonts/fonts.css">
+<link rel="stylesheet" href="css/vendor-leaflet.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ======== ВЫБОР РОЛИ ======== -->
+<section id="role-select" class="screen">
+  <div class="role-wrap">
+    <div class="role-stamp">СЕКРЕТНО &nbsp;·&nbsp; ДЕЛО № 2003/А-217</div>
+    <h1 class="role-title">КОД<br>АНТВЕРПЕНА</h1>
+    <p class="role-sub">Детективная игра для компании по материалам реального дела —<br>ограбление века: Антверпен, февраль 2003.</p>
+    <div class="role-buttons">
+      <button class="role-btn" data-mode="tv">
+        <span class="role-btn-big">ЭКРАН СЛЕДОВАТЕЛЯ</span>
+        <span class="role-btn-small">телевизор / большой экран · открывать в браузере ТВ</span>
+      </button>
+      <button class="role-btn" data-mode="phone">
+        <span class="role-btn-big">ПУЛЬТ СЛЕДОВАТЕЛЯ</span>
+        <span class="role-btn-small">телефон · досье, улики и ответы · подключается по QR</span>
+      </button>
+      <button class="role-btn" data-mode="solo">
+        <span class="role-btn-big">СОЛО НА ОДНОМ ЭКРАНЕ</span>
+        <span class="role-btn-small">если телефон не подключается · управление стрелками и Enter</span>
+      </button>
+    </div>
+    <p class="role-note">Игра синхронизируется через открытые сети (MQTT) и требует интернета.<br>
+    Продолжительность: 2–3 часа · игроков: 2–8 · материалы: реальные документы дела.</p>
+  </div>
+</section>
+
+<!-- ======== ТВ ======== -->
+<section id="tv" class="screen hidden">
+  <header class="tv-header">
+    <div class="tv-brand">КОД АНТВЕРПЕНА</div>
+    <div class="tv-act" id="tv-act">—</div>
+    <div class="tv-timer" id="tv-timer">00:00</div>
+    <div class="tv-score" id="tv-score">0 <span>очк.</span></div>
+    <div class="tv-room" id="tv-room">КОМНАТА —</div>
+    <div class="tv-net" id="tv-net" title="состояние сети">●</div>
+  </header>
+  <main class="tv-stage" id="tv-stage">
+    <div id="tv-view"></div>
+    <div id="tv-map-layer" class="map-tv" style="display:none">
+      <div id="tv-map-caption" class="tv-map-caption hidden"></div>
+      <div class="map-legend"><i style="background:#d9a441"></i>осмотрено<br><i style="background:none;border:1px solid #8a6a2c"></i>не осмотрено</div>
+    </div>
+  </main>
+  <div class="tv-footer" id="tv-footer"></div>
+  <!-- Пульт для соло-режима / резервного управления -->
+  <aside class="tv-drawer hidden" id="tv-drawer">
+    <div class="drawer-head">
+      <span>ПУЛЬТ</span>
+      <button id="drawer-close" class="btn-mini">скрыть</button>
+    </div>
+    <div id="drawer-body"></div>
+  </aside>
+  <button class="drawer-fab hidden" id="drawer-fab">ПУЛЬТ</button>
+</section>
+
+<!-- ======== ТЕЛЕФОН ======== -->
+<section id="phone" class="screen hidden">
+  <header class="ph-header">
+    <div class="ph-head-row">
+      <div class="ph-act" id="ph-act">—</div>
+      <div class="ph-stats">
+        <span id="ph-timer">00:00</span>
+        <span id="ph-score">0 очк.</span>
+        <span class="ph-net" id="ph-net">●</span>
+      </div>
+    </div>
+    <div class="ph-step" id="ph-step">—</div>
+  </header>
+  <main id="phone-stage" class="ph-stage"></main>
+  <nav class="ph-tabs" id="ph-tabs">
+    <button class="ph-tab active" data-tab="flow">Ход</button>
+    <button class="ph-tab" data-tab="case">Дело</button>
+    <button class="ph-tab" data-tab="evidence">Улики</button>
+    <button class="ph-tab" data-tab="map">Карта</button>
+    <button class="ph-tab" data-tab="menu">Меню</button>
+  </nav>
+</section>
+
+<script src="js/vendor/leaflet.js"></script>
+<script src="js/vendor/mqtt.min.js"></script>
+<script src="js/vendor/qrcode.min.js"></script>
+<script src="js/data.js"></script>
+<script src="js/engine.js"></script>
+</body>
+</html>
